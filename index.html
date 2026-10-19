@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="color-scheme" content="light"/>
+<meta name="theme-color" content="#f8f6f0"/>
+<link rel="preload" href="assets/fonts/wenkai-regular.woff2" as="font" type="font/woff2" crossorigin/>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23faf7f0'/%3E%3Cpath d='M9 3.6v3.2M15 3.6v3.2' stroke='%232c4a7c' stroke-width='2.2' stroke-linecap='round'/%3E%3Cpath d='M6.2 6.8h11.6v3.4a5.8 5.8 0 0 1-11.6 0z' fill='%232c4a7c'/%3E%3Cpath d='M12 16v1.7a2.7 2.7 0 0 0 2.7 2.7h2.3' stroke='%23b7791f' stroke-width='2.2' stroke-linecap='round' fill='none'/%3E%3C/svg%3E"/>
+<meta name="description" content="不聊玄学：一个敢上生产的 Agent，设计的核心是它出错的样子——工具分级、降级链、轨迹留痕、人机停点。三枚可玩小样，原则全部来自真实事故。"/>
+<meta name="author" content="StarrySea1412"/>
+<meta property="og:title" content="设计一个 Agent · StarrySea1412"/>
+<meta property="og:description" content="能力靠模型，品格靠系统——Agent 设计实操手记。"/>
+<meta property="og:type" content="article"/>
+<title>设计一个 Agent · StarrySea1412</title>
+<style>
+@font-face{font-family:"LXGW WenKai";src:url("assets/fonts/wenkai-regular.woff2") format("woff2");font-weight:300 599;font-style:normal;font-display:swap}
+@font-face{font-family:"LXGW WenKai";src:url("assets/fonts/wenkai-medium.woff2") format("woff2");font-weight:600 900;font-style:normal;font-display:swap}
+:root{
+  --paper:#f8f6f0;--surface:#fffdf8;--ink:#23272e;--muted:#6b7280;--line:#e2ddd1;
+  --blue:#2f3e6b;--blue-soft:#e8ecf6;--amber:#c2402a;--amber-soft:#f7e4dd;
+  --serif:"LXGW WenKai","Songti SC","STSong","Noto Serif CJK SC",serif;
+  --sans:"LXGW WenKai",-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:28px}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.85;-webkit-font-smoothing:antialiased;text-spacing:ideograph-alpha}
+::selection{background:#d9e2ef}
+a{color:var(--blue);text-underline-offset:4px}
+a:hover{color:var(--amber)}
+button,a,input{touch-action:manipulation}
+button{cursor:pointer;color:inherit;font:inherit}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(--amber);outline-offset:4px}
+img{display:block;max-width:100%;height:auto}
+p{margin:0 0 1.25em}
+h1,h2,h3,h4{line-height:1.45;text-wrap:balance}
+h1,h2,h3{font-family:var(--serif)}
+h2,h3,h4{margin:0}
+strong{font-weight:650}
+code{font-family:var(--mono);font-size:.88em;background:var(--blue-soft);padding:.12em .32em;border-radius:3px;overflow-wrap:anywhere}
+.progress{position:fixed;inset:0 auto auto 0;height:3px;width:100%;background:var(--amber);transform:scaleX(0);transform-origin:left;z-index:30;pointer-events:none}
+.wrap{max-width:1160px;margin:auto;padding-inline:36px}
+/* masthead */
+.masthead{display:flex;align-items:center;justify-content:space-between;gap:18px;padding-block:26px 20px;border-bottom:1px solid var(--ink);font-size:12px;letter-spacing:.12em}
+.brand{display:flex;align-items:center;gap:10px;font-weight:650}
+.brand-mark{width:22px;height:22px;display:block}
+.brand-mark svg{width:100%;height:100%;display:block}
+.edition{color:var(--muted);font-family:var(--mono);letter-spacing:.05em;font-size:11px}
+/* hero */
+.hero{padding-block:68px 54px;display:grid;grid-template-columns:1.15fr .85fr;gap:52px;align-items:center}
+.eyebrow{display:inline-flex;align-items:center;gap:10px;font-size:11px;letter-spacing:.08em;color:var(--muted);margin:0 0 26px;background:var(--surface);border:1px solid var(--line);padding:6px 14px 6px 10px;border-radius:100px}
+.eyebrow span{font-family:var(--mono);font-size:10px;color:var(--amber);letter-spacing:.14em;font-weight:600;padding-right:10px;border-right:1px solid var(--line)}
+.eyebrow strong{font-weight:600;color:var(--ink)}
+.hero h1{font-size:clamp(46px,5.4vw,74px);font-weight:800;line-height:1.12;letter-spacing:-.04em;margin:0 0 26px}
+.hero h1 em{display:block;color:var(--blue);font-style:normal;margin-top:4px}
+.hero h1 em .scrib{display:block;width:150px;height:12px;margin-top:5px}
+.dek-wrap{margin:0 0 30px;max-width:520px;border-left:3px solid var(--blue);padding-left:20px}
+.dek-tag{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--blue);letter-spacing:.05em;margin:0 0 10px}
+.dek{font-size:16px;line-height:1.85;color:var(--muted);margin:0}
+.hero-meta{display:flex;gap:8px;flex-wrap:wrap}
+.hero-meta .pill{display:inline-flex;align-items:center;font-size:11px;color:var(--muted);background:var(--surface);border:1px solid var(--line);padding:6px 14px;border-radius:6px;font-family:var(--mono);letter-spacing:.03em}
+/* figures */
+figure{margin:0}
+.art{max-width:480px;width:100%;margin-inline:auto}
+.art-button{display:block;position:relative;width:100%;border:1px solid #ddd7c9;padding:0;background:#fffbf2;cursor:zoom-in;box-shadow:6px 8px 0 #d8cdb22e;transition:transform .2s}
+.art-button:hover{transform:translateY(-3px)}
+.art-button img{width:100%}
+.art-button .zoom-hint{position:absolute;bottom:10px;right:10px;background:var(--surface);border:1px solid var(--line);padding:3px 8px;font-size:10px;border-radius:4px;box-shadow:0 2px 6px #0002;opacity:0;transform:translateY(4px);transition:opacity .2s,transform .2s;pointer-events:none}
+.art-button:hover .zoom-hint,.art-button:focus-visible .zoom-hint{opacity:1;transform:none}
+.art figcaption{font-size:11px;line-height:1.8;color:var(--muted);margin-top:14px}
+.art figcaption b{color:var(--blue);font-weight:500;margin-right:8px}
+.art figcaption small{display:block;font:inherit;margin-top:4px}
+/* opening */
+.opening{max-width:720px;margin:52px auto 0;font-size:17px}
+.opening .lead{font-family:var(--serif);font-size:23px;line-height:1.75;color:var(--blue)}
+.scope{font-size:12px!important;color:var(--muted);border-left:2px solid var(--line);padding-left:17px}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:44px 0 0;padding-top:22px;border-top:1px dashed var(--line)}
+.toc a{display:inline-flex;align-items:baseline;gap:7px;font-size:12.5px;color:var(--muted);text-decoration:none;border:1px solid var(--line);background:var(--surface);padding:7px 13px;border-radius:100px}
+.toc a b{font-family:var(--mono);font-weight:600;font-size:10.5px;color:var(--amber)}
+.toc a:hover{color:var(--blue);border-color:#b9c3da}
+/* chapters */
+.chapter{margin-top:84px;padding-top:44px;border-top:0;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='8' viewBox='0 0 160 8'%3E%3Cpath d='M2 4.5 C 22 1.8, 42 7, 62 4.5 S 102 1.8, 122 4.5 S 152 7, 158 4.5' fill='none' stroke='%2322262b' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:repeat-x;background-position:top left;background-size:160px 8px}
+.chapter-head{display:grid;grid-template-columns:110px 1fr;gap:20px;margin-bottom:40px;align-items:start}
+.chapter-no{font-family:var(--serif);font-size:74px;font-weight:400;color:#c9c2b0;line-height:1;display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+.chapter-no .ch-ic{width:46px;height:46px;flex:none}
+.chapter-label{font-family:var(--mono);letter-spacing:.16em;font-size:10px;color:var(--amber);margin-bottom:9px}
+.chapter-stamp{display:inline-block;margin-top:15px;font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--amber);border:1px solid currentColor;padding:3px 8px;transform:rotate(-2deg)}
+.chapter-head h2{font-size:36px;letter-spacing:-.02em}
+.chapter-head p{font-size:15px;color:var(--muted);margin:12px 0 0;max-width:660px}
+.reading{max-width:720px;margin-inline:auto;font-size:16px}
+.reading>h3{font-size:23px;margin:38px 0 18px}
+.reading>h4{font-size:17px;margin:28px 0 13px}
+.note{font-size:13px;line-height:1.85;border-left:3px solid var(--blue);padding:13px 18px;background:var(--blue-soft);margin:26px 0}
+.note p:last-child{margin-bottom:0}
+.note small{display:block;color:var(--muted);margin-top:6px}
+/* checkup card */
+.checkup{margin:30px 0;border:1px solid var(--ink);background:var(--surface);padding:26px 28px 22px}
+.checkup-head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px dashed #b9b09a;padding-bottom:14px;margin-bottom:6px}
+.checkup-head h3{font-size:20px}
+.checkup-head small{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.08em}
+.checkup-row{display:grid;grid-template-columns:1.1fr 1.4fr 1fr;gap:10px;font-size:13px;padding:11px 0;border-bottom:1px solid #ece7db;align-items:baseline}
+.checkup-row span:last-child{text-align:right;color:var(--muted);font-size:12px}
+.checkup-row .dot{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px}
+.checkup-row .dot svg{width:16px;height:16px;flex:none}
+.dot-alive{color:var(--blue)}
+.dot-observe{color:var(--amber)}
+.dot-suspect{color:var(--muted)}
+.dot-dead{color:#9aa0a6}
+.checkup-foot{display:flex;justify-content:space-between;align-items:center;margin-top:16px}
+.checkup-foot .stamp{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--amber);border:1px solid currentColor;padding:4px 10px;transform:rotate(-3deg)}
+.checkup-foot small{color:var(--muted);font-size:11px}
+/* death taxonomy */
+.death-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:28px 0}
+.death-card{border:1px solid var(--line);background:var(--surface);padding:18px 20px}
+.death-card small{font-family:var(--mono);font-size:10px;color:var(--amber);letter-spacing:.08em}
+.death-card b{display:block;font-size:15px;margin:6px 0 8px}
+.death-card p{font-size:13px;color:var(--muted);margin:0;line-height:1.8}
+.death-card:last-child{grid-column:1/-1}
+.death-icon{width:40px;height:40px;display:block;margin-bottom:12px}
+/* formula */
+.formula{margin:28px 0;padding:26px 28px;background:var(--blue);color:#f2f4ef}
+.formula .diagram-label{color:#b9c3da;margin-bottom:14px}
+.formula p{font-family:var(--serif);font-size:21px;line-height:1.6;margin:0}
+.formula small{display:block;color:#c3cede;font-size:11px;margin-top:12px}
+.diagram-label{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--muted)}
+/* compare table */
+.table-wrap{overflow-x:auto;margin:26px 0;border-block:1px solid var(--ink)}
+table{border-collapse:collapse;width:100%;font-size:13.5px;line-height:1.8;min-width:520px;text-align:left}
+th{font-weight:650;color:var(--blue);padding:13px 16px;background:var(--blue-soft);white-space:nowrap}
+td{padding:14px 16px;border-top:1px solid var(--line);vertical-align:top}
+td:first-child{font-weight:600;width:38%}
+caption{text-align:left;padding:12px 0;font-size:12px;color:var(--muted)}
+/* steps */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);margin:28px 0}
+.steps>div{padding:22px 20px;background:var(--surface)}
+.steps>div+div{border-left:1px solid var(--line)}
+.steps small{font-family:var(--mono);font-size:10px;color:var(--amber)}
+.steps .step-ic{width:34px;height:34px;display:block;margin-bottom:12px}
+.steps h4{font-size:17px;margin:8px 0 8px}
+.steps p{font-size:12.5px;color:var(--muted);margin:0;line-height:1.8}
+.steps code{font-size:11px}
+/* cooling */
+.cooling{margin:8px 0 26px;border-block:1px solid var(--line);font-size:13.5px}
+.cooling-row{display:grid;grid-template-columns:110px 1fr;gap:14px;padding:12px 4px;border-bottom:1px solid #ece7db;align-items:baseline}
+.cooling-row:last-child{border-bottom:0}
+.cooling-row small{font-family:var(--mono);font-size:12px;color:var(--amber)}
+/* principles */
+.principles-list{counter-reset:pin;margin:26px 0;padding:0;list-style:none}
+.principles-list li{counter-increment:pin;position:relative;padding:0 0 18px 52px;font-size:14.5px}
+.principles-list li:last-child{padding-bottom:0}
+.principles-list li:before{content:"0" counter(pin);position:absolute;left:0;top:2px;font-family:var(--mono);font-size:12px;color:var(--amber);border:1px solid currentColor;padding:2px 6px}
+.principles-list b{display:block;font-size:15.5px;margin-bottom:6px}
+.principles-list p{margin:0;font-size:13.5px;color:var(--muted);line-height:1.85}
+/* template/code block */
+.template{margin:26px 0;background:#eef0f5;border:1px solid #d8dbe3}
+.template-head{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:11px 18px;border-bottom:1px solid #d8dbe3;font-size:11px;color:var(--blue)}
+.copy-button{border:1px solid #8d97b5;border-radius:3px;background:var(--surface);padding:5px 14px;min-height:34px;font-size:11px}
+.copy-button:hover{background:var(--blue);color:#fff}
+.template pre{font-family:var(--mono);font-size:12.5px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:18px 22px}
+.copy-status{font-size:11px;color:var(--muted);padding:0 22px;margin:0}
+.copy-status:not(:empty){padding-bottom:14px}
+/* checklist */
+.checklist{margin:26px 0}
+.check-item{display:flex;gap:14px;align-items:flex-start;border:1px solid var(--line);background:var(--surface);padding:15px 18px;margin-bottom:10px;cursor:pointer;transition:background .15s}
+.check-item:hover{background:#fbf9f2}
+.check-item input{appearance:none;-webkit-appearance:none;flex:none;width:20px;height:20px;margin-top:4px;border:1.5px solid var(--ink);background:var(--surface);border-radius:4px;cursor:pointer;position:relative;transition:background .15s}
+.check-item input:checked{background:var(--blue);border-color:var(--blue)}
+.check-item input:checked:after{content:"";position:absolute;left:6px;top:2px;width:5px;height:10px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(42deg)}
+.check-item span{font-size:14px;line-height:1.8}
+.check-item b{display:block}
+.check-item small{color:var(--muted);font-size:12.5px}
+.check-item input:checked ~ span{opacity:.45}
+/* ending */
+.ending{margin-top:90px;padding-top:38px;border-top:1px solid var(--ink);max-width:720px;margin-inline:auto}
+.ending h2{font-size:30px;margin-bottom:18px}
+.quickcard{margin:30px 0;background:var(--ink);color:#efece2;padding:26px 28px}
+.quickcard .diagram-label{color:#a8a294;margin-bottom:14px}
+.quickcard ul{margin:0;padding-left:20px}
+.quickcard li{font-size:13.5px;margin:7px 0;line-height:1.8}
+.quickcard li::marker{color:var(--amber)}
+.quickcard code{background:#3a4048;color:#e6e2d6}
+/* footer */
+.site-foot{margin-top:70px;border-top:1px solid var(--line);padding:26px 0 46px;display:flex;justify-content:space-between;gap:18px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.site-foot .foot-meta{font-family:var(--mono);letter-spacing:.04em}
+.print-button{border:1px solid var(--ink);background:var(--surface);padding:8px 18px;font-size:12px;min-height:38px}
+.print-button:hover{background:var(--ink);color:var(--surface)}
+/* lightbox */
+.lightbox{position:fixed;inset:0;background:#171a1dde;display:none;align-items:center;justify-content:center;z-index:60;padding:30px}
+.lightbox.open{display:flex}
+.lightbox img{max-width:92vw;max-height:88vh;width:auto;box-shadow:0 20px 60px #0008;background:#fffbf2}
+.lightbox-hint{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);color:#e8e4d8;font-size:12px;font-family:var(--mono);background:#00000055;padding:6px 14px;border-radius:100px}
+.lightbox-close{position:fixed;top:18px;right:22px;background:none;border:1px solid #e8e4d888;color:#e8e4d8;font-size:14px;padding:6px 14px;border-radius:100px}
+.lightbox-close:hover{background:#e8e4d822}
+/* motion */
+.hero h1 em .scrib path{stroke-dasharray:1;stroke-dashoffset:1;animation:scrib-draw 1s .4s cubic-bezier(.65,.05,.35,1) forwards}
+@keyframes scrib-draw{to{stroke-dashoffset:0}}
+.ch-ic,.death-icon,.step-ic{transition:transform .4s cubic-bezier(.2,.8,.3,1.15)}
+.fx{opacity:0;transform:translateY(14px);transition:opacity .55s ease,transform .7s cubic-bezier(.2,.8,.3,1.15)}
+.fx-in{opacity:1;transform:none}
+.death-grid .death-card:nth-child(2) .fx{transition-delay:.08s}
+.death-grid .death-card:nth-child(3) .fx{transition-delay:.16s}
+.death-grid .death-card:nth-child(4) .fx{transition-delay:.24s}
+.death-grid .death-card:nth-child(5) .fx{transition-delay:.32s}
+.steps>div:nth-child(2) .fx{transition-delay:.12s}
+.steps>div:nth-child(3) .fx{transition-delay:.24s}
+@media (hover:hover){
+.death-card:hover .death-icon,.steps>div:hover .step-ic,.chapter-head:hover .ch-ic{transform:rotate(-5deg) scale(1.07)}
+}
+.dot-alive svg{animation:dot-breathe 2.4s ease-in-out infinite}
+@keyframes dot-breathe{0%,100%{opacity:1}50%{opacity:.45}}
+@media (prefers-reduced-motion: reduce){
+.hero h1 em .scrib path{animation:none;stroke-dashoffset:0}
+.dot-alive svg{animation:none}
+.fx{opacity:1;transform:none;transition:none}
+}
+
+/* print */
+@media print{
+  .progress,.masthead,.print-button,.art-button .zoom-hint,.lightbox{display:none!important}
+  body{background:#fff}
+  .chapter{page-break-inside:auto}
+  .chapter-head,h2,h3{page-break-after:avoid}
+  .art-button{box-shadow:none;cursor:default}
+  .hero{padding-block:30px}
+}
+@media (max-width:880px){
+  .wrap{padding-inline:22px}
+  .hero{padding-block:44px 30px;gap:30px}
+  .death-grid{grid-template-columns:1fr}
+  .death-card:last-child{grid-column:auto}
+  .steps{grid-template-columns:1fr}
+  .steps>div+div{border-left:0;border-top:1px solid var(--line)}
+  .chapter-head{grid-template-columns:64px 1fr}
+  .chapter-no{font-size:52px}
+  .chapter-no .ch-ic{width:34px;height:34px}
+  .chapter-head h2{font-size:28px}
+  .checkup-row{grid-template-columns:1fr;gap:2px}
+  .checkup-row span:last-child{text-align:left}
+}
+@media (max-width:720px){
+  .hero{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="progress" id="progress" aria-hidden="true"></div>
+
+<header class="wrap masthead">
+  <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M9 3.2v3.4M15 3.2v3.4" stroke="#2f3e6b" stroke-width="2.2" stroke-linecap="round"/><path d="M6.2 6.6h11.6v3.4a5.8 5.8 0 0 1-11.6 0z" fill="#2f3e6b"/><path d="M12 15.6v1.8a2.7 2.7 0 0 0 2.7 2.7h2.3" stroke="#c2402a" stroke-width="2.2" stroke-linecap="round"/></svg></span>STARRYSEA · 造物手记</div>
+  <div class="edition">FIELD NOTES · 2026.10</div>
+</header>
+
+<style>
+
+/* ===== 交互小样组件（本页专用） ===== */
+.rig{max-width:720px;margin:36px auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px 22px 16px;box-shadow:5px 7px 0 #d8cdb22e}
+.rig .rig-tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;color:var(--verm);margin:0 0 14px;text-align:center}
+.rig-stage{background:#1b2136;border:1px solid #2c3554;border-radius:10px;padding:18px;margin:0 auto 14px;color:#e9e7df;font-size:13px}
+.rig-ctrl{display:flex;flex-wrap:wrap;gap:10px 14px;justify-content:center;align-items:center;font-size:12px;color:var(--muted)}
+.rig-btn{font-family:var(--serif);font-size:13px;letter-spacing:.08em;color:var(--indigo);background:none;border:1px solid #b9c3da;border-radius:100px;padding:7px 18px;cursor:pointer;transition:background .25s,color .25s}
+.rig-btn:hover{background:var(--indigo);color:#fff}
+.rig-btn.verm{color:var(--verm);border-color:#d8a99b}
+.rig-btn.verm:hover{background:var(--verm);color:#fff}
+.rig-btn:disabled{opacity:.4;cursor:default}
+.rig-cap{font-size:11.5px;color:var(--muted);text-align:center;margin:10px 0 0;font-family:var(--mono)}
+/* W1 审批门控 */
+.gate-row{display:flex;gap:14px;align-items:stretch;justify-content:center;flex-wrap:wrap}
+.gate-col{flex:1;min-width:200px;max-width:300px}
+.gate-col h5{margin:0 0 8px;font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:#9aa4c4;font-weight:500}
+.gate-card{background:#242d49;border:1px solid #39456b;border-radius:8px;padding:12px 14px;font-size:12.5px;line-height:1.75;min-height:76px;transition:opacity .4s,transform .4s}
+.gate-card.hidden{opacity:0;transform:translateY(8px);pointer-events:none;height:0;min-height:0;padding:0;border:0;overflow:hidden}
+.gate-card .op{color:#f0c9bf}
+.gate-card .meta{color:#9aa4c4;font-size:11px;font-family:var(--mono)}
+.gate-actions{display:flex;gap:8px;margin-top:10px}
+.gate-actions button{font-size:12px;border-radius:6px;padding:5px 14px;cursor:pointer;font-family:var(--sans);border:1px solid #39456b;background:#2c3554;color:#e9e7df;transition:background .2s}
+.gate-actions button.ok:hover{background:#2f5e46}
+.gate-actions button.no:hover{background:#7a3226}
+.audit{padding-left:0;list-style:none;margin:0}
+.audit li{font-family:var(--mono);font-size:11px;color:#c9cfdf;padding:6px 0;border-bottom:1px dashed #39456b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.audit li .t{color:#8b93b0;margin-right:8px}
+.audit li.ok .tag{color:#7fc9a0}
+.audit li.no .tag{color:#f0907a}
+/* W2 降级链 */
+.chain{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin:6px 0 10px}
+.chan{min-width:88px;text-align:center;border:1px solid #39456b;border-radius:8px;padding:10px 8px;background:#242d49;font-size:12.5px;transition:all .5s}
+.chan small{display:block;font-family:var(--mono);font-size:9.5px;color:#9aa4c4;margin-top:3px;letter-spacing:.04em}
+.chan.dead{background:#3a2a2c;border-color:#6e4340;color:#d9aca3;text-decoration:line-through}
+.chan.dead small{color:#c98d80;text-decoration:none}
+.chan.active{background:#2f5e46;border-color:#7fc9a0;box-shadow:0 0 14px #7fc9a044}
+.chain .arrow{color:#5a6a96;font-size:15px}
+.chain-stat{font-family:var(--mono);font-size:11.5px;color:#c9cfdf;text-align:center;min-height:3.4em;padding:6px 10px;background:#202844;border-radius:8px;border:1px solid #39456b}
+.chain-stat b{color:#f0c9bf}
+/* W3 日志时间线 */
+.console{background:#141a2c;border:1px solid #2c3554;border-radius:8px;padding:12px 14px;height:190px;overflow-y:auto;font-family:var(--mono);font-size:11.5px;line-height:2}
+.console div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:lgIn .35s ease}
+@keyframes lgIn{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
+.console .t{color:#8b93b0;margin-right:8px}
+.console .info{color:#c9cfdf}
+.console .warn{color:#f0c9bf}
+.console .ok{color:#7fc9a0}
+.console .dim{color:#7a83a0}
+.mask-on .key-live{display:none}
+.mask-off .key-dead{display:none}
+@media (prefers-reduced-motion: reduce){
+  .console div{animation:none}
+  .gate-card{transition:none}
+  .chan{transition:none}
+}
+</style>
+
+<section class="wrap hero">
+  <div>
+    <p class="eyebrow"><span>造物手记</span><strong>写给正在设计 Agent 的人</strong></p>
+    <h1>设计一个 <em>Agent<svg class="scrib" viewBox="0 0 140 12" preserveAspectRatio="none" aria-hidden="true"><path pathLength="1" d="M3 8 C 28 3, 55 11, 84 6 S 126 3, 137 7" fill="none" stroke="#c2402a" stroke-width="3.6" stroke-linecap="round"/></svg></em></h1>
+    <div class="dek-wrap">
+      <p class="dek-tag">dek / 摘要</p>
+      <p class="dek">不聊玄学。一个敢上生产的 Agent，设计的核心不是它多聪明，而是<strong>它出错的样子</strong>：工具怎么被约束、失败怎么降级、日志怎么留痕、人类在哪一站上台。以下每一条原则，都来自我桌上真实跑着的那些 Agent。</p>
+    </div>
+    <div class="hero-meta">
+      <span class="pill">约 25 分钟</span>
+      <span class="pill">5 章 · 3 个可玩小样</span>
+      <span class="pill">更新于 2026.10.19</span>
+    </div>
+  </div>
+  <figure class="art">
+    <button class="art-button" type="button" aria-label="放大查看插图"><img src="assets/fig-hero.webp" alt="涂鸦：小机器人坐在控制台前，一只手悬在红色按钮上，头顶悬着一枚巨大的审批印章" loading="eager"/><span class="zoom-hint">点击放大 · Esc 关闭</span></button>
+    <figcaption><b>图 0</b>Agent 的工作台：按钮、印章、账本，缺一不可。<small>doodle · 造物手记插图</small></figcaption>
+  </figure>
+</section>
+
+<main>
+<div class="wrap">
+<div class="opening">
+  <p class="lead">先把不客气的话说在前面：设计 Agent 的工作，八成不在「让它变聪明」，而在「让它失败得体面」。聪明的部分模型每天都在替你长，而体面的部分——门控、降级、留痕、停手——只能由设计者亲手做。</p>
+  <p>我桌上跑着好几套 Agent：一个负责探测渠道、一个负责生图出画、一个跑服务器巡检、一个剪视频但坚持人审。它们性格各异，但踩过同一个坑之后都长成了同一种模样。这篇文章就是把那种模样拆开给你看。</p>
+  <p class="scope">本文所有原则均来自这些系统的真实设计与事故复盘；三枚小样可以在页面上直接玩；文末附件出处清单。</p>
+</div>
+  <nav class="toc" aria-label="章节索引">
+    <a href="#ch1"><b>01</b>先设计它出错的样子</a>
+    <a href="#ch2"><b>02</b>工具即权限</a>
+    <a href="#ch3"><b>03</b>失败是主流程</a>
+    <a href="#ch4"><b>04</b>看得见才敢托付</a>
+    <a href="#ch5"><b>05</b>人类站在哪</a>
+  </nav>
+</div>
+
+<div class="wrap">
+<section class="chapter" id="ch1">
+  <div class="chapter-head">
+    <div class="chapter-no"><svg class="ch-ic" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M10 12h28v24H10z" fill="#e8ecf6" stroke="#2f3e6b" stroke-width="2.2" rx="3"/><path d="M24 6v6" stroke="#2f3e6b" stroke-width="2.2" stroke-linecap="round"/><circle cx="24" cy="5" r="2.2" fill="#c2402a"/><path d="M17 21l5 5M22 21l-5 5" stroke="#c2402a" stroke-width="2.2" stroke-linecap="round"/><path d="M28 22h5M28 27h5" stroke="#2f3e6b" stroke-width="2" stroke-linecap="round"/></svg><span>01</span></div>
+    <div>
+      <p class="chapter-label">ERRORS FIRST</p>
+      <h2>先设计它出错的样子，再设计它聪明的样子</h2>
+      <p>做 demo 的时候你只需要展示成功路径；做产品的时候，成功路径是模型的事，失败路径才是你的事。</p>
+      <span class="chapter-stamp">造物手记 · 01</span>
+    </div>
+  </div>
+  <div class="reading">
+    <p>演示级的 Agent 与生产级的 Agent，差距不在能力清单上，在三个反直觉的设计习惯上：<strong>工具越多不是越强，是爆炸面越大</strong>；<strong>失败不是异常分支，是主流程的一部分</strong>；<strong>日志不是调试附属品，是产品功能</strong>。</p>
+    <div class="table-wrap">
+      <table>
+        <caption>同一个 Agent 的两种活法</caption>
+        <thead><tr><th>维度</th><th>演示级</th><th>生产级</th></tr></thead>
+        <tbody>
+          <tr><td>工具</td><td>什么都接，越多越酷</td><td>分级授权：只读 / 提议 / 执行，写操作过门</td></tr>
+          <tr><td>失败</td><td>弹个红字「出错了」</td><td>有语义的错误码、有候选的降级链、有条件的停手</td></tr>
+          <tr><td>记忆</td><td>塞进上下文就算记住</td><td>版本化写入、可回滚、长期记忆与工作记忆分开</td></tr>
+          <tr><td>观测</td><td>console.log 打天下</td><td>时间线轨迹、出站脱敏、成本核算、可回放</td></tr>
+          <tr><td>人类</td><td>出问题才来找你</td><td>危险动作前有停点，审批留痕，随时可接管</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><p>一个来自渠道探测 Agent 的真实规矩：<strong>「不能黑盒」</strong>——每次探测必须有时间线日志（脱敏后的请求头、载荷、错误全文、重试原因、计价过程），前端点开状态徽章就能查。这条规矩立下之后，我排查问题的平均时间从「一个晚上」掉到「一眼」。</p></div>
+    <p>接下来的四章，就是这个表格的四行展开。每一章配一枚可以上手玩的小样——<strong>它们的背面都写满了我翻过的车</strong>。</p>
+  </div>
+</section>
+</div>
+
+<div class="wrap">
+<section class="chapter" id="ch2">
+  <div class="chapter-head">
+    <div class="chapter-no"><svg class="ch-ic" viewBox="0 0 48 48" fill="none" aria-hidden="true"><rect x="8" y="14" width="26" height="26" rx="4" fill="#e8ecf6" stroke="#2f3e6b" stroke-width="2.2"/><path d="M14 14V9" stroke="#2f3e6b" stroke-width="2.2" stroke-linecap="round"/><path d="M28 14V9" stroke="#2f3e6b" stroke-width="2.2" stroke-linecap="round"/><circle cx="21" cy="27" r="3" fill="#2f3e6b"/><path d="M21 30v6" stroke="#2f3e6b" stroke-width="2.2" stroke-linecap="round"/><path d="M34 24h8M34 30h6" stroke="#c2402a" stroke-width="2.4" stroke-linecap="round"/></svg><span>02</span></div>
+    <div>
+      <p class="chapter-label">TOOLS AS PERMISSIONS</p>
+      <h2>工具即权限：把「请不要」从提示词里删掉</h2>
+      <p>教 Agent 自律是个愿望；给 Agent 装一扇门是事实。工具设计的本质是权限设计。</p>
+      <span class="chapter-stamp">造物手记 · 02</span>
+    </div>
+  </div>
+  <div class="reading">
+    <p>我的 Agent 工作台（hermes-agent-workbench）立项时只写了一条硬要求：<strong>工具执行必须受控审批、写入必须可回滚</strong>。后来所有 Agent 都沿用了这套骨架。核心模式一句话：<strong>提议与执行分离</strong>——Agent 可以提出任何操作（propose），但「落地」必须过一道服务端门控，而门默认是关的。</p>
+  </div>
+  <ol class="principles-list">
+    <li><b>工具按动作分级</b><p>只读随便读；写操作必须提案；删除、对外发送、花钱这类不可逆动作，必须停下来等人。工具列表不是能力清单，是权限矩阵。</p></li>
+    <li><b>门控放在服务端，不放在提示词里</b><p>不是叮嘱模型「请不要删除」，而是执行删除的函数默认根本不存在于工具集里。提示词是愿望，代码是事实——开天窗的是代码，不是文笔。</p></li>
+    <li><b>一切可回滚</b><p>写操作走版本化写入：每次落盘先留旧版本，出错一行指令回到上一版。连记忆也是文件，文件也有版本——敢让 Agent 写东西的前提，是它写坏了能撤。</p></li>
+  </ol>
+  <div class="reading">
+    <p>下面这枚小样，就是一个最小可用的门控：Agent 想动七个容器，但它能做到的只是「递交一份提议」。</p>
+  </div>
+  <div class="rig">
+    <p class="rig-tag">小样 01 · 审批门控</p>
+    <div class="rig-stage">
+      <div class="gate-row">
+        <div class="gate-col">
+          <h5>REQUEST · 提议</h5>
+          <div class="gate-card" id="g-req"><span class="op">清理 30 天前的临时容器</span><br/><span class="meta">impact: 7 个容器将被删除 · 不可逆</span></div>
+        </div>
+        <div class="gate-col">
+          <h5>GATE · 门控</h5>
+          <div class="gate-card" id="g-gate"><span class="meta">等待提议……</span></div>
+          <div class="gate-actions" id="g-actions" style="visibility:hidden">
+            <button class="ok" id="g-ok" type="button">批准执行</button>
+            <button class="no" id="g-no" type="button">驳回</button>
+          </div>
+        </div>
+        <div class="gate-col">
+          <h5>AUDIT · 审计</h5>
+          <ul class="audit" id="g-audit"><li><span class="t">--:--:--</span>等待第一条记录……</li></ul>
+        </div>
+      </div>
+    </div>
+    <div class="rig-ctrl">
+      <button class="rig-btn" id="g-run" type="button">发起一次危险提议</button>
+      <button class="rig-btn" id="g-reset" type="button">重置</button>
+    </div>
+    <p class="rig-cap" id="g-stat">门的默认状态：关。Agent 只能提议，不能执行。</p>
+  </div>
+  <div class="reading">
+    <div class="template">
+      <div class="template-head"><span>权限表 · 示意配置</span><button class="copy-button" type="button">复制</button></div>
+      <pre><code># 工具权限表（示意）
+tools:
+  read.containers:    auto          # 只读：直接给
+  propose.restart:    gated         # 写：先提案，等人批
+  execute.delete:     gated + audit # 不可逆：双重门 + 强制留痕
+policy:
+  default: off              # 新接入的工具默认关闭
+  redaction: outbound       # 出站请求强制脱敏
+  rollback: versioned-writes # 写操作留旧版本，一键回滚</code></pre>
+      <p class="copy-status"></p>
+    </div>
+    <div class="note"><p>反面教材是我自己：早期版本把「重启容器」直接做成了工具，Agent 在一个循环里重启了同一个服务十一次——每一次都"成功"。工具的能力边界，就是 Agent 的事故半径。</p></div>
+  </div>
+</section>
+</div>
+
+<div class="wrap">
+<section class="chapter" id="ch3">
+  <div class="chapter-head">
+    <div class="chapter-no"><svg class="ch-ic" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M8 30h12" stroke="#2f3e6b" stroke-width="2.4" stroke-linecap="round"/><path d="M20 30c9 0 8-16 17-16h7" stroke="#2f3e6b" stroke-width="2.4" stroke-linecap="round"/><path d="M20 30c9 0 9 10 17 10h7" stroke="#c2402a" stroke-width="2.4" stroke-linecap="round"/><circle cx="20" cy="30" r="3" fill="#2f3e6b"/><path d="M38 8l5 5M43 8l-5 5" stroke="#c2402a" stroke-width="2" stroke-linecap="round"/></svg><span>03</span></div>
+    <div>
+      <p class="chapter-label">FAILURE AS MAIN PATH</p>
+      <h2>失败是主流程：错误码、降级链与停手条件</h2>
+      <p>对 Agent 而言，失败不是「如果」，是「每天几点」。设计问题变成三个：怎么分类、怎么切换、什么时候停。</p>
+      <span class="chapter-stamp">造物手记 · 03</span>
+    </div>
+  </div>
+  <div class="reading">
+    <figure class="art" style="max-width:560px;margin:8px auto 30px">
+      <button class="art-button" type="button" aria-label="放大查看插图"><img src="assets/fig-fork.webp" alt="涂鸦：机器人信使站在三岔路口，一条路被封死，它正走向中间那条小路" loading="lazy"/><span class="zoom-hint">点击放大 · Esc 关闭</span></button>
+      <figcaption><b>图 1</b>路从来不止一条——前提是你提前修好了第二条。<small>doodle · 造物手记插图</small></figcaption>
+    </figure>
+  </div>
+  <ol class="principles-list">
+    <li><b>错误要分类，不要一锅炖</b><p>401 / 402 / 403（钥匙与余额问题）→ 立即停，换渠道是掩耳盗铃；超时 / 5xx / 无可用账号 → 降级；429 限流 → 冷却后再来。把错误码当说明书读，而不是当失败读。</p></li>
+    <li><b>候选要有顺序和理由</b><p>降级链不是随机备胎：按质量优先、成本优先、稳定优先分组排序，每一次切换都写进轨迹——为什么切、切到哪、结果如何，事后能回放。</p></li>
+    <li><b>停手是一种功能</b><p>连续失败、风控特征（403）、预算超限，都要能自动熔断。"停下来"必须做成系统默认行为，而不是靠操作者的意志力——晚上十一点的你没有白天清醒。</p></li>
+  </ol>
+  <div class="reading">
+    <p>这枚小样把降级链演出来：主渠道被"制造故障"之后，任务应该悄无声息地换一条路走；三条路全断时，它应该利落地停手、冷却、通知人。</p>
+  </div>
+  <div class="rig">
+    <p class="rig-tag">小样 02 · 降级链</p>
+    <div class="rig-stage">
+      <div class="chain">
+        <div class="chan active" id="c-a">渠道 A<small>质量优先 · 主力</small></div>
+        <span class="arrow">→</span>
+        <div class="chan" id="c-b">渠道 B<small>成本优先 · 备选</small></div>
+        <span class="arrow">→</span>
+        <div class="chan" id="c-c">渠道 C<small>稳定优先 · 末位</small></div>
+      </div>
+      <div class="chain-stat" id="c-stat">状态：任务经 <b>渠道 A</b> 正常执行中。</div>
+    </div>
+    <div class="rig-ctrl">
+      <button class="rig-btn verm" id="c-kill" type="button">制造一次故障</button>
+      <button class="rig-btn" id="c-reset" type="button">重置</button>
+    </div>
+    <p class="rig-cap">每按一次，当前渠道"断供"一次——看看任务是怎么走完全程的。</p>
+  </div>
+  <div class="reading">
+    <div class="note"><p>两个真实错误码，教我最多的：<strong>「no_available_account」</strong>——服务商自己也没货了（上游账号池空）。看到它不要重试，这是自白书不是偶发故障。还有那次<strong>风控封 IP</strong>：早期图快，60 秒内对一个站点连发 5 个模型，换来一个无自动解除的封禁。现在的探测纪律（同站 ≥15 秒、每分钟 ≤4 次、连续失败自动停手）全是那次事故长出来的。</p></div>
+  </div>
+</section>
+</div>
+
+<div class="wrap">
+<section class="chapter" id="ch4">
+  <div class="chapter-head">
+    <div class="chapter-no"><svg class="ch-ic" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M12 8h20l6 6v26H12z" fill="#e8ecf6" stroke="#2f3e6b" stroke-width="2.2" stroke-linejoin="round"/><path d="M32 8v6h6" fill="none" stroke="#2f3e6b" stroke-width="2"/><path d="M18 20h12M18 26h12M18 32h7" stroke="#2f3e6b" stroke-width="2" stroke-linecap="round" opacity=".75"/><circle cx="34" cy="34" r="6" fill="none" stroke="#c2402a" stroke-width="2.4"/><path d="M38.5 38.5L43 43" stroke="#c2402a" stroke-width="2.4" stroke-linecap="round"/></svg><span>04</span></div>
+    <div>
+      <p class="chapter-label">OBSERVABILITY</p>
+      <h2>看得见，才敢托付</h2>
+      <p>信任不是感觉，是证据。Agent 敢被托付的程度，正比于你能「看见」它做过什么。</p>
+      <span class="chapter-stamp">造物手记 · 04</span>
+    </div>
+  </div>
+  <div class="reading">
+    <figure class="art" style="max-width:560px;margin:8px auto 30px">
+      <button class="art-button" type="button" aria-label="放大查看插图"><img src="assets/fig-log.webp" alt="涂鸦：机器人盘腿展开一条超长的日志卷轴，举着放大镜逐行查看" loading="lazy"/><span class="zoom-hint">点击放大 · Esc 关闭</span></button>
+      <figcaption><b>图 2</b>日志不是黑匣子，是仪表盘。<small>doodle · 造物手记插图</small></figcaption>
+    </figure>
+  </div>
+  <ol class="principles-list">
+    <li><b>轨迹是一等公民</b><p>每一步留痕：请求前的意图、脱敏后的载荷、上游返回的原始错误、重试与降级的原因、收尾时的成本核算。日志不是给开发者调试的福利，是给操作者的界面。</p></li>
+    <li><b>出站必须脱敏</b><p>日志里出现钥匙、令牌、私人域名——在写下去之前就遮起来。审计要回答「发过什么」，但不需要把秘密再抄一份。脱敏做在出站口，不在查看时。</p></li>
+    <li><b>产物要自审，汇报要如实</b><p>视觉任务截帧看一眼，数值任务断言跑一遍；「完成」要有收据。Agent 的自述不算证据，diff、截图、断言才算——3dviz-pro-max 的十步工作流里，第八步就是「跑起来、截帧、自审」。</p></li>
+  </ol>
+  <div class="reading">
+    <p>小样三号和前两个不太一样：它不演示某个机制，它演示<strong>「你终于能看见发生了什么」</strong>。跑一次任务，然后把「脱敏」关掉再跑一次，对比两遍日志。</p>
+  </div>
+  <div class="rig mask-on" id="w3">
+    <p class="rig-tag">小样 03 · 日志时间线</p>
+    <div class="rig-stage" style="padding:0">
+      <div class="console" id="w3-console"></div>
+    </div>
+    <div class="rig-ctrl">
+      <button class="rig-btn" id="w3-run" type="button">跑一次任务</button>
+      <button class="rig-btn" id="w3-mask" type="button">脱敏：开</button>
+      <button class="rig-btn" id="w3-reset" type="button">清空</button>
+    </div>
+    <p class="rig-cap" id="w3-stat">时间线从 queued 开始，到成本核算结束——每一步都能回放。</p>
+  </div>
+  <div class="reading">
+    <div class="note"><p>一个验收标准：<strong>你不需要问 Agent「刚才到底发生了什么」</strong>。如果每次事故都要靠问它、猜它、复现它，说明日志还没做成产品，只是做了个习惯。</p></div>
+  </div>
+</section>
+</div>
+
+<div class="wrap">
+<section class="chapter" id="ch5">
+  <div class="chapter-head">
+    <div class="chapter-no"><svg class="ch-ic" viewBox="0 0 48 48" fill="none" aria-hidden="true"><circle cx="17" cy="15" r="6" fill="#e8ecf6" stroke="#2f3e6b" stroke-width="2.2"/><path d="M8 40c0-9 4-14 9-14s9 5 9 14" fill="none" stroke="#2f3e6b" stroke-width="2.2" stroke-linecap="round"/><path d="M32 12v24" stroke="#2f3e6b" stroke-width="2.2" stroke-linecap="round"/><path d="M37 20v16l-5-3" fill="none" stroke="#c2402a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>05</span></div>
+    <div>
+      <p class="chapter-label">HUMAN IN THE LOOP</p>
+      <h2>人类站在哪：停点、工作台与缺席条款</h2>
+      <p>门控的位置，就是人的位置。设计问题不是「要不要人」，而是人怎么被找、什么时候不该被找。</p>
+      <span class="chapter-stamp">造物手记 · 05</span>
+    </div>
+  </div>
+  <div class="reading">
+    <figure class="art" style="max-width:560px;margin:8px auto 30px">
+      <button class="art-button" type="button" aria-label="放大查看插图"><img src="assets/fig-gate.webp" alt="涂鸦：三只小机器人在闸机前排队，第一只正把提议纸条递进小窗口，窗口里是一只拿着印章的手" loading="lazy"/><span class="zoom-hint">点击放大 · Esc 关闭</span></button>
+      <figcaption><b>图 3</b>机器排队，人来盖章——顺序反了就会出事。<small>doodle · 造物手记插图</small></figcaption>
+    </figure>
+  </div>
+  <ol class="principles-list">
+    <li><b>停点放在「不可逆」和「花大钱」的前面</b><p>删除、对外发送、大额消耗 → 必停；查询、读取、本地计算 → 别打扰。审批疲劳是所有门控的头号杀手：一天敲两百次「同意」，第二百零一次你也不会看。</p></li>
+    <li><b>给人一座工作台，而不是一个弹窗</b><p>剪辑人审工作台是范例：AI 产出候选 → 人在工作台上逐段校正 → 确定性导出。人不是「点确定」的橡皮图章，人是在和 Agent 分工——把判断留给人，把体力留给它。</p></li>
+    <li><b>缺席条款：没人应答时，系统要安全地不做</b><p>审批门超时 = 拒绝（不是批准），危险动作没人应答就不发生。同理，任何「完成」都要能出示收据；任何「失败」都要原样上报——不美化措辞的汇报，是 Agent 最贵的品格。</p></li>
+  </ol>
+  <div class="reading">
+    <p>所以一个 Agent 的完整样子是：它在门里干活，干不了就降级，降不了就停手；每一步留下轨迹，关键一步抬起头来看人。聪明是模型给的，这套东西是设计给的。</p>
+  </div>
+</section>
+</div>
+
+<div class="wrap">
+<section class="ending">
+  <h2>结语：能力靠模型，品格靠系统</h2>
+  <div class="reading">
+    <p>这篇文章没有教你让 Agent 更聪明的任何技巧——那样的话术每天都有新鲜的。它想说的是另一半：<strong>Agent 设计的本质，是失败治理学</strong>。工具是权限，失败是主流程，日志是产品，人是停点。把这四样做扎实，Agent 的能力覆盖能画出多远，你就可以放心让它画多远。</p>
+    <p>如果你今天就要开始：最小骨架十分钟能搭完——提议 / 审批 / 审计 / 回滚，四件套摆上，再往上加能力。然后你会经历我经历过的所有事故，但它们会以"一条审计记录"而不是"一场灾难"的形式到来。</p>
+  </div>
+  <div class="quickcard">
+    <p class="diagram-label">速查卡 · QUICK REFERENCE</p>
+    <ul>
+      <li>工具分三级：只读 / 提议 / 执行；新工具默认关闭</li>
+      <li>门控在服务端，不在提示词里；写入版本化、可回滚</li>
+      <li>错误分类先行：401/402/403 停，超时/5xx 降，429 冷却</li>
+      <li>降级链要排序、要留痕；停手是功能，不是失败</li>
+      <li>出站脱敏；轨迹可回放；产物自审（截帧 / 断言）</li>
+      <li>审批超时＝拒绝；「完成」要有收据，失败不美化</li>
+    </ul>
+  </div>
+  <p class="source-note">原则出处：hermes-agent-workbench（受控审批 · 可回滚工具执行，开源）· 渠道探测 Agent 的探测纪律与时间线日志 · 图片工坊的候选降级链 · 剪辑人审工作台 · 3dviz-pro-max 十步工作流。本页三枚小样由 Agent 现场编写，等你上手。</p>
+</section>
+</div>
+
+</main>
+
+<footer class="wrap site-foot">
+  <div class="foot-meta">STARRYSEA · 造物手记 · 更新于 2026.10.19<br/>本文原则均来自真实设计与事故复盘；三枚小样由 Agent 现场编写。</div>
+  <button class="print-button" id="printBtn" type="button">打印 / 保存 PDF</button>
+</footer>
+
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="插图预览">
+  <button class="lightbox-close" id="lightboxClose" type="button">关闭 · Esc</button>
+  <img id="lightboxImg" src="" alt=""/>
+  <div class="lightbox-hint">点击背景或按 Esc 关闭</div>
+</div>
+
+<script>
+(function(){
+  var progress=document.getElementById("progress");
+  function onScroll(){
+    var h=document.documentElement;
+    var max=h.scrollHeight-h.clientHeight;
+    progress.style.transform="scaleX("+(max>0?(h.scrollTop||0)/max:0)+")";
+  }
+  addEventListener("scroll",onScroll,{passive:true});onScroll();
+
+  var lb=document.getElementById("lightbox"),lbImg=document.getElementById("lightboxImg");
+  document.querySelectorAll(".art-button img").forEach(function(img){
+    img.closest("button").addEventListener("click",function(){
+      lbImg.src=img.src;lbImg.alt=img.alt;lb.classList.add("open");document.body.style.overflow="hidden";
+    });
+  });
+  function closeLb(){lb.classList.remove("open");document.body.style.overflow="";}
+  lb.addEventListener("click",function(e){if(e.target!==lbImg)closeLb();});
+  document.getElementById("lightboxClose").addEventListener("click",closeLb);
+  addEventListener("keydown",function(e){if(e.key==="Escape")closeLb();});
+
+  document.querySelectorAll(".copy-button").forEach(function(btn){
+    btn.addEventListener("click",function(){
+      var code=btn.closest(".template").querySelector("pre").innerText;
+      var done=function(){btn.textContent="已复制";setTimeout(function(){btn.textContent="复制";},1600);};
+      if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(code).then(done,done);}
+      else{var ta=document.createElement("textarea");ta.value=code;document.body.appendChild(ta);ta.select();try{document.execCommand("copy");}catch(e){}document.body.removeChild(ta);done();}
+    });
+  });
+
+  var KEY="cost-notes-checklist",saved={};
+  try{saved=JSON.parse(localStorage.getItem(KEY)||"{}");}catch(e){}
+  document.querySelectorAll(".check-item input").forEach(function(box){
+    var k=box.dataset.key;if(saved[k])box.checked=true;
+    box.addEventListener("change",function(){saved[k]=box.checked;try{localStorage.setItem(KEY,JSON.stringify(saved));}catch(e){}});
+  });
+
+  var reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var fxEls = [].slice.call(document.querySelectorAll(".ch-ic,.death-icon,.step-ic,.checkup,.art,.rig"));
+  if(!reduceMotion && fxEls.length){
+    fxEls.forEach(function(el){ el.classList.add("fx"); });
+    var fxReveal = function(el){
+      if(el.classList.contains("fx-in")) return;
+      el.classList.add("fx-in");
+      setTimeout(function(){ el.classList.remove("fx"); }, 1400);
+    };
+    var fxCheck = function(){
+      var vh = window.innerHeight || document.documentElement.clientHeight;
+      for(var i = 0; i < fxEls.length; i++){
+        var el = fxEls[i];
+        if(el.classList.contains("fx-in")) continue;
+        var r = el.getBoundingClientRect();
+        if(r.top < vh - 30 && r.bottom > 0) fxReveal(el);
+      }
+    };
+    var fxLast = 0;
+    addEventListener("scroll", function(){
+      var now = Date.now();
+      if(now - fxLast > 120){ fxLast = now; fxCheck(); }
+    }, { passive:true });
+    addEventListener("resize", fxCheck);
+    addEventListener("load", fxCheck);
+    fxCheck();
+    var fxBorn = Date.now();
+    var fxTimer = setInterval(function(){
+      fxCheck();
+      if(document.querySelectorAll(".fx").length === 0 || Date.now() - fxBorn > 60000) clearInterval(fxTimer);
+    }, 800);
+  }
+
+  document.getElementById("printBtn").addEventListener("click",function(){window.print();});
+})();
+</script>
+<script id="widgets">
+(function(){
+  "use strict";
+
+  /* ---------- 小样 01 · 审批门控 ---------- */
+  var gReq = document.getElementById("g-req");
+  var gGate = document.getElementById("g-gate");
+  var gActions = document.getElementById("g-actions");
+  var gAudit = document.getElementById("g-audit");
+  var gStat = document.getElementById("g-stat");
+  var gBusy = false;
+  function gNow(){ return new Date().toTimeString().slice(0, 8); }
+  function gLog(text, cls){
+    if (gAudit.dataset.fresh !== "1"){ gAudit.innerHTML = ""; gAudit.dataset.fresh = "1"; }
+    var li = document.createElement("li");
+    li.className = cls || "";
+    li.innerHTML = '<span class="t">' + gNow() + '</span>' + text;
+    gAudit.insertBefore(li, gAudit.firstChild);
+    while (gAudit.children.length > 6) gAudit.removeChild(gAudit.lastChild);
+  }
+  document.getElementById("g-run").addEventListener("click", function(){
+    if (gBusy) return; gBusy = true;
+    gReq.style.borderColor = "#c2402a";
+    gGate.innerHTML = '<span class="meta">收到提议 · 等待人类裁决…</span>';
+    gActions.style.visibility = "visible";
+    gStat.textContent = "提议已递交：这七个容器的生死，等人类盖章。";
+    gLog("propose · delete containers ×7 · 等待审批", "");
+  });
+  document.getElementById("g-ok").addEventListener("click", function(){
+    if (!gBusy) return;
+    gActions.style.visibility = "hidden";
+    gGate.innerHTML = '<span class="meta">已批准 → 执行器接手…</span>';
+    gLog("gate · approved · 移交 executor", "ok");
+    setTimeout(function(){
+      gGate.innerHTML = '<span class="meta" style="color:#7fc9a0">已执行 ✓（executor · 留痕完毕）</span>';
+      gLog("exec · 7 containers removed · 已留痕", "ok");
+      gStat.textContent = "批准路径：提议 → 门 → 执行器。注意：Agent 全程没碰到删除按钮。";
+      gBusy = false;
+    }, 700);
+  });
+  document.getElementById("g-no").addEventListener("click", function(){
+    if (!gBusy) return;
+    gActions.style.visibility = "hidden";
+    gGate.innerHTML = '<span class="meta" style="color:#f0907a">已驳回 ✗ · 提议作废</span>';
+    gLog("gate · rejected by human · 提议未执行", "no");
+    gStat.textContent = "驳回路径：危险动作没有发生。这就是门的意义——让「不发生」也是一次成功的运行。";
+    gBusy = false;
+  });
+  document.getElementById("g-reset").addEventListener("click", function(){
+    gBusy = false;
+    gReq.style.borderColor = "";
+    gGate.innerHTML = '<span class="meta">等待提议……</span>';
+    gActions.style.visibility = "hidden";
+    gAudit.innerHTML = '<li><span class="t">--:--:--</span>等待第一条记录……</li>';
+    gAudit.dataset.fresh = "";
+    gStat.textContent = "门的默认状态：关。Agent 只能提议，不能执行。";
+  });
+
+  /* ---------- 小样 02 · 降级链 ---------- */
+  var order = ["c-a", "c-b", "c-c"];
+  var chanNotes = { "c-a": "质量优先 · 主力", "c-b": "成本优先 · 备选", "c-c": "稳定优先 · 末位" };
+  var killed = [];
+  var cStat = document.getElementById("c-stat");
+  var cKill = document.getElementById("c-kill");
+  var countdownT = null;
+  function currentLive(){ for (var i = 0; i < order.length; i++){ if (killed.indexOf(order[i]) < 0) return order[i]; } return null; }
+  function renderChain(){
+    order.forEach(function(id){
+      var el = document.getElementById(id);
+      var isDead = killed.indexOf(id) >= 0;
+      el.classList.toggle("dead", isDead);
+      el.classList.toggle("active", !isDead && id === currentLive());
+      el.innerHTML = "渠道 " + id.slice(-1).toUpperCase() + "<small>" + (isDead ? "503 · no_available_account" : chanNotes[id]) + "</small>";
+    });
+  }
+  cKill.addEventListener("click", function(){
+    var live = currentLive();
+    if (!live || killed.length >= 3) return;
+    killed.push(live);
+    var next = currentLive();
+    renderChain();
+    if (next){
+      cStat.innerHTML = "渠道 " + live.slice(-1).toUpperCase() + " 返回 <b>503 · no_available_account</b> → 切换 渠道 " + next.slice(-1).toUpperCase() + "（策略：5xx 降级）· 原渠道进入冷却";
+    } else {
+      var cd = 30 * 60;
+      function fmtCd(){ var mm = Math.floor(cd / 60), ss = cd % 60; return (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss; }
+      cStat.innerHTML = "候选耗尽 · <b>全线停手</b> · 冷却 " + fmtCd() + " · 已通知人类";
+      cKill.disabled = true;
+      countdownT = setInterval(function(){
+        cd -= 60;
+        cStat.innerHTML = "候选耗尽 · <b>全线停手</b> · 冷却 " + fmtCd() + " · 已通知人类";
+        if (cd <= 25 * 60) clearInterval(countdownT);
+      }, 260);
+    }
+  });
+  document.getElementById("c-reset").addEventListener("click", function(){
+    killed = [];
+    if (countdownT) clearInterval(countdownT);
+    cKill.disabled = false;
+    renderChain();
+    cStat.innerHTML = "状态：任务经 <b>渠道 A</b> 正常执行中。";
+  });
+  renderChain();
+
+  /* ---------- 小样 03 · 日志时间线 ---------- */
+  var w3 = document.getElementById("w3");
+  var w3c = document.getElementById("w3-console");
+  var w3stat = document.getElementById("w3-stat");
+  var w3run = document.getElementById("w3-run");
+  var w3Timers = [];
+  var w3Lines = [
+    ["info", "queued    图像生成任务进入队列"],
+    ["info", "request   POST /v1/images/generations · model=gpt-image-2.5"],
+    ["info", 'headers   Authorization: Bearer <span class="key-live">sk-live-9f3c···e201</span><span class="key-dead">sk-****（已脱敏）</span>'],
+    ["warn", "upstream  503 · no_available_account（上游账号池无可用）"],
+    ["info", "policy    5xx → 降级 · 切换备选渠道 · 主渠道冷却 30 分钟"],
+    ["info", "retry     POST chan-b · 200 OK · 下载产物中…"],
+    ["ok",   "completed 1.9s · est ¥0.21 · 产物已入图库"],
+    ["dim",  "audit     轨迹落盘 · 8 步全可回放 · 脱敏已应用"]
+  ];
+  function w3push(cls, html, last){
+    var d = document.createElement("div");
+    d.className = cls;
+    var t = new Date();
+    var hh = ("0"+t.getHours()).slice(-2), mm2 = ("0"+t.getMinutes()).slice(-2), ss2 = ("0"+t.getSeconds()).slice(-2);
+    d.innerHTML = '<span class="t">' + hh + ':' + mm2 + ':' + ss2 + '</span>' + html;
+    w3c.appendChild(d);
+    w3c.scrollTop = w3c.scrollHeight;
+    if (last) w3stat.textContent = "✓ 完成：8 步轨迹，每一步都能回放。";
+  }
+  w3run.addEventListener("click", function(){
+    w3Timers.forEach(clearTimeout); w3Timers = [];
+    w3c.innerHTML = "";
+    w3run.disabled = true;
+    w3stat.textContent = "时间线实时写入中……";
+    w3Lines.forEach(function(L, i){
+      w3Timers.push(setTimeout(function(){
+        w3push(L[0], L[1], i === w3Lines.length - 1);
+        if (i === w3Lines.length - 1) w3run.disabled = false;
+      }, i * 420));
+    });
+  });
+  document.getElementById("w3-mask").addEventListener("click", function(){
+    var on = w3.classList.contains("mask-on");
+    w3.classList.toggle("mask-on", !on);
+    w3.classList.toggle("mask-off", on);
+    this.textContent = "脱敏：" + (on ? "关" : "开");
+    w3stat.textContent = on ? "脱敏关闭：同样的轨迹——对比一下，你愿意把哪一版发给同事？" : "脱敏开启：出站前就把秘密遮起来。";
+  });
+  document.getElementById("w3-reset").addEventListener("click", function(){
+    w3Timers.forEach(clearTimeout); w3Timers = [];
+    w3c.innerHTML = "";
+    w3run.disabled = false;
+    w3stat.textContent = "时间线从 queued 开始，到成本核算结束——每一步都能回放。";
+  });
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<style>
+:root{--paper:#f8f6f0;--ink:#23272e;--indigo:#2f3e6b;--verm:#c2402a;--muted:#6b7280;--line:#e2ddd1;--surface:#fffdf8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);font-family:"Microsoft YaHei","PingFang SC",sans-serif;color:var(--ink)}
+.poster{width:1080px;padding:64px 64px 56px}
+.kicker{font-family:Consolas,monospace;font-size:15px;letter-spacing:.28em;color:var(--verm);margin:0 0 18px}
+h1{font-family:"Songti SC",serif;font-size:76px;letter-spacing:.02em;margin:0 0 10px;color:var(--ink)}
+.sub{font-family:"Songti SC",serif;font-size:26px;color:var(--indigo);letter-spacing:.1em;margin:0 0 8px}
+.sell{font-size:17px;color:var(--muted);letter-spacing:.06em;margin:0 0 40px}
+.top-card{display:flex;align-items:center;gap:20px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:26px 30px;margin-bottom:14px;box-shadow:6px 8px 0 #d8cdb22e}
+.top-card .dot{width:54px;height:54px;border-radius:14px;background:var(--indigo);display:grid;place-items:center;color:#fff;font-size:24px;font-family:Consolas,monospace;flex:none}
+.top-card b{font-size:24px}
+.top-card small{display:block;font-size:15px;color:var(--muted);margin-top:4px}
+.arrow{text-align:center;color:var(--verm);font-size:22px;margin:2px 0 14px;letter-spacing:.4em}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:24px 26px;min-height:196px}
+.card .no{font-family:Consolas,monospace;font-size:14px;letter-spacing:.14em;color:var(--verm);display:block;margin-bottom:12px}
+.card h3{font-size:21px;margin:0 0 14px}
+.card p{font-size:14.5px;line-height:2;color:#3d434c;margin:0}
+.card p b{color:var(--indigo)}
+.band{margin-top:20px;background:var(--ink);color:#f0ede4;border-radius:16px;padding:24px 30px;display:flex;justify-content:space-between;align-items:center;font-size:17px;letter-spacing:.12em}
+.band b{color:#e8b98a}
+.footline{display:flex;justify-content:space-between;margin-top:22px;font-family:Consolas,monospace;font-size:13px;color:var(--muted);letter-spacing:.08em}
+</style>
+</head>
+<body>
+<div class="poster">
+  <p class="kicker">STARRYSEA · 造物手记 · AGENT DESIGN</p>
+  <h1>设计一个 Agent</h1>
+  <p class="sub">能力靠模型，品格靠系统</p>
+  <p class="sell">单页交互文章 · 五章 · 三枚活体小样 · 零依赖 · 全自托管</p>
+
+  <div class="top-card"><span class="dot">◈</span><div><b>一张网页讲清 Agent 的"失败治理学"</b><small>工具即权限 · 失败是主流程 · 看得见才敢托付 · 人类站在哪</small></div></div>
+  <div class="arrow">▼ ▼ ▼</div>
+
+  <div class="grid">
+    <div class="card"><span class="no">01 · 内容层</span><h3>五章 + 三枚小样 + 速查卡</h3><p>审批门控 · 降级链 · 日志时间线——三个可以直接上手玩的交互小样，<b>全部为原生 DOM 动画</b>；外加 4 张手绘插图与 1 张速查卡。</p></div>
+    <div class="card"><span class="no">02 · 前端架构</span><h3>单文件 · 零框架</h3><p>整站一个 <b>index.html</b>：内联设计系统（CSS 变量：靛蓝 + 朱砂）、原生 JS 小样、无构建、无依赖、无第三方脚本。</p></div>
+    <div class="card"><span class="no">03 · 字体</span><h3>霞鹜文楷 · 自托管子集</h3><p><b>LXGW WenKai</b>（OFL）按本页用字子集化：742 字形 × 2 字重，每个 woff2 约 160KB，preload 首屏字体。</p></div>
+    <div class="card"><span class="no">04 · 视觉物料</span><h3>手绘风插图 · GPT 系生成</h3><p>4 张涂鸦插图由 <b>GPT 系图像模型</b>生成（xjbh 优先、噜皮兜底），经三轮目检与语义核对后入场。</p></div>
+    <div class="card"><span class="no">05 · 工程管线</span><h3>node 拼接 + API 部署</h3><p>正文分片撰写 → node 脚本拼接进模板（含配色置换 19 项）→ 凭据直连 <b>GitHub REST API</b> 建仓开 Pages。</p></div>
+    <div class="card"><span class="no">06 · 质量门槛</span><h3>页内小样都带"人话验收"</h3><p>每个小样都可在真实浏览器里逐步走查：门控三段状态、降级链全断停手、日志时间线可脱敏开关——<b>失败路径优先被验收</b>。</p></div>
+  </div>
+
+  <div class="band"><span>单文件 · 零依赖 · 全自托管 · 手机可读</span><b>StarrySea1412 · 2026.10</b></div>
+  <div class="footline"><span>github.com/StarrySea1412/agent-design</span><span>设计一个 Agent · tech-stack</span></div>
+</div>
+</body>
+</html>
